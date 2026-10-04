@@ -106,8 +106,8 @@ idf.py -p <PORT> monitor         # 退出：Ctrl+]
 
 片内 C6 + ESP-Hosted **已经端到端验证**：端到端投屏 **60 fps、0 丢帧**
 （TCP JPEG → 硬件解码 → i80 双缓冲），ping RTT 4.5 ms。
-演示工程在工作区 `../p4_wireless_display/`，链路探针与完整证据链在
-`../p4_wifi_probe/`（`FINDINGS.md`）。
+演示工程在本仓 `wireless/p4_wireless_display/`，链路探针与完整证据链在
+`wireless/p4_wifi_probe/`（`FINDINGS.md`）。
 
 链路吞吐（**数字随协议模式变，引用时必须带条件**）：
 - 从机 **2.12.13**（兼容模式）：单次 **60 s** 长跑 **5.44 MB/s（43.5 Mbps）**；
@@ -122,7 +122,7 @@ idf.py -p <PORT> monitor         # 退出：Ctrl+]
 
 **C6 从机也已经升到 3.0.9**（与 host 同版本）：日志 `fw versions: host=3.0.9
 coprocessor=3.0.9 (match)`，`SDIO SW_AGGR` 协商成功，版本警告消失；
-两套从机镜像（3.0.9 与旧 2.12.13）都留档在 `../p4_wifi_ota/c6_firmware/`，可随时回退。
+两套从机镜像（3.0.9 与旧 2.12.13）都留档在 `wireless/p4_wifi_ota/c6_firmware/`，可随时回退。
 
 想继续做的话：
 

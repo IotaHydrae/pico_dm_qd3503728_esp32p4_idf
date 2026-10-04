@@ -1,0 +1,13 @@
+## 依赖照抄 ESP-IDF 自带的 examples/wifi/iperf/main/idf_component.yml —— 那是官方为
+## ESP32-P4 钉好的版本矩阵（P4 没有原生 WiFi，走 esp_hosted + esp_wifi_remote 两芯片方案）。
+dependencies:
+  espressif/esp_wifi_remote:
+    version: ">=0.10,<2.0"
+    rules:
+      - if: "target in [esp32p4, esp32h2]"
+  espressif/esp_hosted:
+    # 实测：2.12.0 主机 + 2.12.13 从机时 SDIO 写路径立刻失败（0x102）；
+    # 而 OTA 例子用 3.x 主机时整条通路能跑完 1.28 MB ⇒ 升到 3.x。
+    version: "~3"
+    rules:
+      - if: "target in [esp32p4, esp32h2]"

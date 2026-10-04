@@ -1,0 +1,15 @@
+menu "P4 wifi probe"
+
+    config PROBE_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+
+    config PROBE_WIFI_PASSWORD
+        string "WiFi password"
+        default ""
+
+    config PROBE_WIFI_IP_TIMEOUT_S
+        int "Seconds to wait for an IP before giving up"
+        default 30
+
+endmenu

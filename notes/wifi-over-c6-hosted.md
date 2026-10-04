@@ -109,5 +109,5 @@ TCP 收 JPEG → 硬件解码 → i80 上屏（双缓冲乒乓）。两种传输
 ## 相关
 
 - [general/esp-hosted-version-pinning.md](general/esp-hosted-version-pinning.md) —— 版本组合为什么是硬约束
-- 演示工程（不在本仓）：工作区 `../p4_wireless_display/`（端到端投屏）、
-  `../p4_wifi_probe/`（链路吞吐探针与完整证据 `FINDINGS.md`）
+- 工程都在本仓 `wireless/` 下：`wireless/p4_wireless_display/`（端到端投屏）、
+  `wireless/p4_wifi_probe/`（链路吞吐探针与完整证据 `FINDINGS.md`）

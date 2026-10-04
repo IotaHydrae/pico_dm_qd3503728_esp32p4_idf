@@ -1,0 +1,10 @@
+# 主机侧给 C6 刷固件的 OTA 工程（含留档的 C6 镜像）
+# 凭据只允许出现在被忽略的 sdkconfig 里（WiFi PSK 等一律不进仓）
+build/
+build_*/
+sdkconfig
+sdkconfig.old
+managed_components/
+dependencies.lock
+__pycache__/
+*.pyc

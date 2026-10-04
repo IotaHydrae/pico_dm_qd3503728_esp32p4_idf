@@ -1,0 +1,12 @@
+## 依赖版本是**实测**结论，不要照抄 IDF examples/wifi/iperf 的 "~2"：
+## 2.12.0 主机 + 本板 C6 时 SDIO 写路径立刻失败（0x102），3.0.9 才稳
+## （见 ../p4_wifi_probe/FINDINGS.md 的单变量实验）。
+dependencies:
+  espressif/esp_hosted:
+    version: "~3"
+    rules:
+      - if: "target in [esp32p4, esp32h2]"
+  espressif/esp_wifi_remote:
+    version: ">=0.10,<2.0"
+    rules:
+      - if: "target in [esp32p4, esp32h2]"

@@ -1,0 +1,38 @@
+menu "Wireless display demo"
+
+    config WDD_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+
+    config WDD_WIFI_PASSWORD
+        string "WiFi password"
+        default ""
+
+    config WDD_WIFI_IP_TIMEOUT_S
+        int "Seconds to wait for an IP"
+        default 30
+
+    choice WDD_FRAMES_TRANSPORT
+        prompt "Frame transport"
+        default WDD_FRAMES_UDP
+        help
+            UDP 一帧切成分片发送，收到更新的帧号就丢弃未组装完的旧帧（低延迟、不排队）；
+            TCP 是长度前缀的字节流，无丢帧但受往返/窗口限制（实测上限 114 fps，
+            而设备内部 decode+flush 只要 5.7 ms）。
+
+        config WDD_FRAMES_UDP
+            bool "UDP fragments with stale-frame dropping"
+
+        config WDD_FRAMES_TCP
+            bool "TCP stream ([u32 length][JPEG])"
+    endchoice
+
+    config WDD_UDP_PORT
+        int "UDP port for JPEG fragments"
+        default 5002
+
+    config WDD_TCP_PORT
+        int "TCP port for the length-prefixed stream"
+        default 5001
+
+endmenu

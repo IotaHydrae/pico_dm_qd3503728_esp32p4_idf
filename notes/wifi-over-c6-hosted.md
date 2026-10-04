@@ -111,3 +111,12 @@ TCP 收 JPEG → 硬件解码 → i80 上屏（双缓冲乒乓）。两种传输
 - [general/esp-hosted-version-pinning.md](general/esp-hosted-version-pinning.md) —— 版本组合为什么是硬约束
 - 工程都在本仓 `wireless/` 下：`wireless/p4_wireless_display/`（端到端投屏）、
   `wireless/p4_wifi_probe/`（链路吞吐探针与完整证据 `FINDINGS.md`）
+
+## 方向（**未开始**，别当成已完成）
+
+- **与树莓派 Pico W 侧保持协议兼容**：无线这条路的传输模式（分片帧头
+  `[u32 frame][u16 idx][u16 cnt][u32 total]` + 丢帧策略）在 P4 上已经量清楚，Pico W
+  那边还没开始。将来做 `pud-wireless` 时**字段只追加、不重排、不复用编号**，两侧文档
+  成对更新（与工作区 `AGENTS.md` §4 的协议约定一致）。
+- 三个子工程将来可能摘成独立仓（`pud-wireless` / `esp32p4-wireless-display`）——
+  它们内部互相引用一律用相对路径，就是为了那时能整目录摘走。

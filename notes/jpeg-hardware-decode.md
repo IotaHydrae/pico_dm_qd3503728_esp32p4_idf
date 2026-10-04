@@ -16,6 +16,21 @@
 - 未解释项：乒乓只比串行快 5%（详情与数据见下），怀疑与 PSRAM 上的 DMA 并行争用有关，
   **尚未验证**，别当结论用。
 
+## 输入格式要求（实测踩过）
+
+硬件解码器**不是**什么 JPEG 都收。实测：ffmpeg 默认 MJPEG 的输出采样因子是三个分量都
+`h=1, v=2`（非标准布局）⇒ 解码器直接拒绝：
+
+```text
+E jpeg.decoder: Sampling factor cannot be recognized
+E jpeg.decoder: jpeg_decoder_process(314): write header info to hw failed
+```
+
+标准 **4:2:0**（Y `h=2,v=2`、Cb/Cr `h=1,v=1`）可以解 ✓。生成侧两条可用做法：
+ffmpeg 加 `-pix_fmt yuvj420p`；PIL 用 `subsampling=2`（本项目内置测试图都是这样）。
+排查口径：设备侧统计里 **`bad` 持续增长**就是码流不被接受，
+不是链路或解码性能问题。
+
 ## 输出格式与元素序：用合成图自动判定（不靠眼睛）
 
 做法：生成一张 480x320 的四象限纯色图（左红/右上绿/左下蓝/右下白，外圈 8px 黑框），

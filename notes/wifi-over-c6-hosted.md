@@ -22,6 +22,9 @@
   都有 **7~8 倍余量**。ping RTT 平均 4.5 ms。
 - 必需 sdkconfig（缺了起不来或直接崩）：`SPIRAM_XIP_FROM_PSRAM`、`CACHE_L2_CACHE_256KB`、
   `CACHE_L2_CACHE_LINE_128B`、`FREERTOS_HZ=1000`（hosted 要求 1000，100 会抖）。
+- **UDP 收大流量时还要 `CONFIG_LWIP_UDP_RECVMBOX_SIZE=64`**（默认 6）：接收端是"成串出帧"
+  的采集源时，突发会把默认邮箱打爆 ⇒ 丢分片 ⇒ 整帧被丢帧策略丢掉。实测同一个发送器
+  在邮箱=6 时设备只显示 **9.4/30 fps**、=64 时 **30.0/30** ✓（官方 P4+hosted 配置用的也是 64）。
 
 ## 现象与结论：为什么"照抄官方例子"会掉进坑里
 

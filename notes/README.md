@@ -13,9 +13,11 @@ ESP32-S3 那份在 `../pico_dm_qd3503728_esp32s3_idf/notes/`；跨项目可复�
 | [lcd-transfer-throughput.md](lcd-transfer-throughput.md) | 刷一帧要多久？该用多大的笔？为什么必须双缓冲？ |
 | [jpeg-hardware-decode.md](jpeg-hardware-decode.md) | P4 硬件 JPEG 解码多快？缓冲放哪？怎么零拷贝上屏？ |
 | [pin-map.md](pin-map.md) | 面板/触模接到哪些 GPIO？冲突审计的结论是什么？ |
+| [wifi-over-c6-hosted.md](wifi-over-c6-hosted.md) | 这块板的 WiFi 怎么起来？C6 要刷吗？吞吐多少？ |
 | [general/esp-idf-i80-pclk-divider.md](general/esp-idf-i80-pclk-divider.md) | 为什么 `pclk_hz` 请求 50 MHz 实际跑 80 MHz？ |
 | [general/esp-idf-i80-transfer-overhead.md](general/esp-idf-i80-transfer-overhead.md) | 为什么小笔刷屏白扔带宽？每笔的固定开销从哪来？ |
 | [general/esp32p4-dma-buffer-placement.md](general/esp32p4-dma-buffer-placement.md) | P4 上 DMA 缓冲能放 PSRAM 吗？哪些外设强制要 PSRAM？ |
+| [general/esp-hosted-version-pinning.md](general/esp-hosted-version-pinning.md) | 为什么换 host 组件版本会让"通"变"不通"？怎么排？ |
 
 登记（**上游内容，未改动，不为满足预算而重写**）：`../hardware-docs/*.pdf` 是厂商
 数据手册/技术参考手册；`main/assets/jpeg_assets.h` 由 `scripts/make-jpeg-assets.py`

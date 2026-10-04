@@ -102,6 +102,20 @@ idf.py -p <PORT> monitor         # 退出：Ctrl+]
    **PSRAM 上 JPEG 2D-DMA 写 + i80 GDMA 读并行互相拖累**。含义：若墙在内存带宽，
    上第二个核也救不了。见 `notes/jpeg-hardware-decode.md`。
 
+## 6.5 无线这条路（已打通，可选继续）
+
+片内 C6 + ESP-Hosted **已经端到端验证**：链路 **5.44 MB/s / 43.5 Mbps**（60 s 长跑，
+ping RTT 4.5 ms），端到端投屏 **60 fps、0 丢帧**（TCP JPEG → 硬件解码 → i80 双缓冲）。
+演示工程在工作区 `../p4_wireless_display/`，链路探针与完整证据链在
+`../p4_wifi_probe/`（`FINDINGS.md`）。
+
+**唯一硬约束**：host 组件用 `espressif/esp_hosted "~3"` —— IDF 官方例子给 P4 钉的
+`"~2"` 在本板上数据面直接崩（`0x102` → `Unrecoverable host sdio state`）。
+细节见 `notes/wifi-over-c6-hosted.md`。
+
+想继续做的话：桌面采集实时投屏（取代现在的合成动画）、UDP + 丢帧策略换更低延迟、
+或把 C6 从机也升到 3.x 消掉版本警告。
+
 ## 7. 提交前要处理的事
 
 `main/main.c` 的相位轮转与 `main/jpeg_bench.c` 目前**既是自检也是基准**（属于

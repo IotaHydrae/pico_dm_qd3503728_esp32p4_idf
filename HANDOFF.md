@@ -113,8 +113,12 @@ ping RTT 4.5 ms），端到端投屏 **60 fps、0 丢帧**（TCP JPEG → 硬件
 `"~2"` 在本板上数据面直接崩（`0x102` → `Unrecoverable host sdio state`）。
 细节见 `notes/wifi-over-c6-hosted.md`。
 
-想继续做的话：桌面采集实时投屏（取代现在的合成动画）、UDP + 丢帧策略换更低延迟、
-或把 C6 从机也升到 3.x 消掉版本警告。
+**C6 从机也已经升到 3.0.9**（与 host 同版本）：日志 `fw versions: host=3.0.9
+coprocessor=3.0.9 (match)`，`SDIO SW_AGGR` 协商成功，版本警告消失；
+两套从机镜像（3.0.9 与旧 2.12.13）都留档在 `../p4_wifi_ota/c6_firmware/`，可随时回退。
+
+想继续做的话：桌面采集实时投屏（取代现在的合成动画）、或 UDP + 丢帧策略换更低延迟
+（当前 114 fps 的量测上限是 TCP 往返/窗口限制的，设备内部能到 ~175 fps）。
 
 ## 7. 提交前要处理的事
 

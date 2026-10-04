@@ -30,7 +30,7 @@ PUD 设备端固件的 **ESP32-P4 移植**。本文件是接手须知。ESP32-S3
 | 烧写 | 板上 USB 转串口的 DTR/RTS 接着 EN/BOOT ⇒ `idf.py flash` 即可，**不用按键** ✓ |
 | 解码 | **硬件 JPEG**（`esp_driver_jpeg`）：480x320 → RGB565 只要 **1.7~1.8 ms/帧**（≈570 fps），比总线快 2.3 倍 ✓；输入/输出缓冲**必须在 PSRAM**（2D-DMA 限制），而 i80 **能直接读 PSRAM**（零拷贝，与内部 RAM 源同速 77.5 MB/s）✓ |
 | 端到端 | 解码 + 上屏：串行 **5.72 ms/帧（174.7 fps）**，对 60 fps 有 3 倍余量 ✓ |
-| 无线 | 片内 C6 + ESP-Hosted（**host 组件必须 `~3`**，官方例子钉的 `~2` 在本板崩）：实测 **5.44 MB/s / 43.5 Mbps**、ping RTT 4.5 ms ✓；端到端投屏 demo（TCP JPEG → 硬件解码 → i80）**60 fps、0 丢帧** ✓。详见 `notes/wifi-over-c6-hosted.md` |
+| 无线 | 片内 C6 + ESP-Hosted，**host 与从机都已 3.0.9**（`fw versions … (match)` + `SDIO SW_AGGR` 生效）：链路 **4.95~5.03 MB/s（40 Mbps，3 次）**、ping RTT 4.5 ms ✓；端到端投屏 demo **60 fps、0 丢帧**，量测上限 114 fps（瓶颈在 TCP 往返）✓。**host 组件必须 `~3`**——官方例子钉的 `~2` 在本板数据面直接崩。详见 `notes/wifi-over-c6-hosted.md` |
 | 未做 | USB 主机链路（P4 原生 USB 在 P1 的 MX1.25 4pin 上，等线）、PUD 协议层、触模 |
 
 细节与判据在各 `notes/*.md`（**索引在 `notes/README.md`**），接手先读 `HANDOFF.md`。

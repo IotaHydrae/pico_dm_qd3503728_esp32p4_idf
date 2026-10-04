@@ -13,9 +13,13 @@
   `CLK=18 CMD=19 D0=14 D1=15 D2=16 D3=17 RESET=54`（C6 侧是固定脚 IO19/18/20-23），
   另有一根 `C6_IO2 → P4 GPIO6` 的握手线。
 - **C6 出厂固件可用、通常不需要刷**（微雪 FAQ 也这么说）；真要升级有两条路，
-  见下面"刷从机固件"。
-- 实测吞吐 **5.44 MB/s（43.5 Mbps）稳跑 60 s**，ping RTT 平均 4.5 ms；
-  480x320 JPEG q60 @60fps 只需 0.66 MB/s ⇒ **8 倍余量**。
+  见下面"刷从机固件"。**本板现况：C6 已升到 3.0.9，与 host 同版本**
+  （日志 `fw versions: host=3.0.9 coprocessor=3.0.9 (match)`，且 **SDIO SW_AGGR 协商成功**）。
+- 实测吞吐：host 3.0.9 + 从机 2.12.13（兼容模式）单次 60 s 得 **5.44 MB/s（43.5 Mbps）**；
+  从机也升到 3.0.9 后连测 3 次得 **4.95 / 5.01 / 5.03 MB/s（39.6~40.2 Mbps）**。
+  两者差约 8%，**大于同固件的重复性离散（1.6%），但没做同时刻 A/B ⇒ 不下"新版更慢"的结论**
+  （也可能是 2.4G 环境变化）。无论哪组，对 480x320 JPEG q60 @60fps（需 0.66 MB/s）
+  都有 **7~8 倍余量**。ping RTT 平均 4.5 ms。
 - 必需 sdkconfig（缺了起不来或直接崩）：`SPIRAM_XIP_FROM_PSRAM`、`CACHE_L2_CACHE_256KB`、
   `CACHE_L2_CACHE_LINE_128B`、`FREERTOS_HZ=1000`（hosted 要求 1000，100 会抖）。
 
@@ -28,6 +32,7 @@
 
 单变量逻辑：先把 C6 从机 OTA 升到 2.12.13 ⇒ 配 2.12.0 host **仍然失败** ✗；
 再只把 host 换成 3.0.9 ⇒ **通** ✓（所以决定因素是 host 版本）。
+之后再把从机也升到 **3.0.9**（与 host 同版本）⇒ 版本警告消失、SW 聚合生效 ✓。
 
 ## 必需的整块配置（来源都写清楚，别当魔法）
 
@@ -60,18 +65,28 @@
    实测：**1 282 464 B / 约 9 s 传完并生效** ✓（从机版本随之从"报 0.0.0 的老固件"变为 2.12.13）。
    注意：写镜像要 `esptool write-flash --force 0x5F0000 <img>`（镜像是 C6 的，
    esptool 会拒绝把它当 P4 镜像；这里它只是**数据分区的内容**）。
-   从机镜像由组件自带源码编出：
-   `idf.py -C managed_components/espressif__esp_hosted/slave -B <builddir> set-target esp32c6 && build`
+   **3.x 的从机工程路径变了**：2.x 在组件的 `slave/`，3.x 在
+   `examples/ota/coprocessor_ota/cp/`（自带 4 MB A/B OTA 分区表，从机侧有回滚）。
+   `idf.py -C <该工程> -B <builddir> set-target esp32c6 && idf.py -C … build`。
+   **离线构建的坑**：该工程的 `main/idf_component.yml` 默认从组件仓库拉 `esp_hosted`，
+   访问不到 `components-file.espressif.com` 时配置阶段直接失败 ✗；改成指向本地组件时
+   `override_path` **必须写绝对路径**（相对路径的解析基准与文档所述不一致，实测失败）。
 2. **H4 排针 + USB-TTL（恢复/首次刷写）**：H4 = **1:IO9、2:GND、3:C6_U0RXD、4:C6_U0TXD**
    （原理图坐标重建所得，与微雪 FAQ 一致）；TTL 的 TX→3、RX→4、GND→2；
    **先给 IO9 短到 GND**，**按住板子 BOOT 再上电**（BOOT 让 P4 别去控 C6 复位），然后
    `esptool --chip esp32c6 ... write-flash 0x0 bootloader.bin 0x8000 partition-table.bin 0xd000 ota_data_initial.bin 0x10000 network_adapter.bin`。
 
+## 端到端（投屏 demo）
+
+TCP 收 JPEG → 硬件解码 → i80 上屏（双缓冲乒乓）：**60 fps、0 丢帧**（1193 帧，
+decode 1.70~1.76 ms/帧、flush+wait 3.95 ms/帧）；预编码猛推的量测上限 **114.5 fps**
+（设备侧 113~115 fps 同样 0 bad）⇒ 当前瓶颈是 **TCP 往返/窗口**，不是设备
+（设备内部 decode+flush 只要 5.7 ms ≈ 175 fps）。升从机前后这两个数字**没有变化**。
+
 ## 边界与陷阱
 
-- 3.0.9 主机 + 2.12.13 从机会报 `major version mismatch — OTA coprocessor from host`，
-  并自动走 "compatible streaming mode" —— 功能正常（实测 43.5 Mbps），
-  想消掉警告可以把从机也 OTA 到 3.x 对应版本。
+- 主机与从机**同版本**时最干净（本板现况 3.0.9+3.0.9）：无版本警告、`SDIO SW_AGGR`
+  协商成功。旧从机（2.12.13）配 3.x 主机也能跑，但只能走 `compatible streaming mode`。
 - **主机与从机的 SDIO streaming/packet 模式必须一致**：一边 streaming 一边 packet 会直接
   `SDIO mode mismatch ... Aborting` ✗（换组件大版本后尤其要核对）。
 - 凭据（SSID/密码）只放**被 gitignore 的 `sdkconfig`**；核对凭据用可指认来源

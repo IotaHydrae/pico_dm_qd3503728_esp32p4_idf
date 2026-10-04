@@ -31,6 +31,7 @@ PUD 设备端固件的 **ESP32-P4 移植**。本文件是接手须知。ESP32-S3
 | 解码 | **硬件 JPEG**（`esp_driver_jpeg`）：480x320 → RGB565 只要 **1.7~1.8 ms/帧**（≈570 fps），比总线快 2.3 倍 ✓；输入/输出缓冲**必须在 PSRAM**（2D-DMA 限制），而 i80 **能直接读 PSRAM**（零拷贝，与内部 RAM 源同速 77.5 MB/s）✓ |
 | 端到端 | 解码 + 上屏：串行 **5.72 ms/帧（174.7 fps）**，对 60 fps 有 3 倍余量 ✓ |
 | 无线 | 片内 C6 + ESP-Hosted，**host 与从机都已 3.0.9**（`fw versions … (match)` + `SDIO SW_AGGR` 生效）：链路 **4.95~5.03 MB/s（40 Mbps，3 次）**、ping RTT 4.5 ms ✓；端到端投屏 demo **60 fps、0 丢帧**；**UDP + 丢帧策略**把上限推到 **~150 fps**（TCP 是 114）；实时采集投屏（合成/视频源）**30 fps、0 bad** ✓。**host 组件必须 `~3`**——官方例子钉的 `~2` 在本板数据面直接崩。详见 `notes/wifi-over-c6-hosted.md` |
+| 桌面采集（PC 侧） | Wayland 门户 `ScreenCast → PipeWire → pipewiresrc`：**授权框必须选带屏幕名字的第一项**（`Share "<monitor>"`）；选 `virtual screen` 会拿到一块新建的空屏（只有壁纸）—— 投屏照样"成功"、设备侧照样 `0 bad` ✗。管道必须**先钉源的 caps（尺寸钉死、格式取节点声明并集、帧率不钉）再转换**，否则 `no more input formats` / `set output format: -22`。真桌面 mirror 已上板 ✓；帧率取决于屏幕变化量（`drop-only`）。详见 `notes/wayland-portal-capture.md` |
 | 未做 | USB 主机链路（P4 原生 USB 在 P1 的 MX1.25 4pin 上，等线）、PUD 协议层、触模 |
 
 细节与判据在各 `notes/*.md`（**索引在 `notes/README.md`**），接手先读 `HANDOFF.md`。

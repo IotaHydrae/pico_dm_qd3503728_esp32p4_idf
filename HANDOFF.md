@@ -104,10 +104,17 @@ idf.py -p <PORT> monitor         # 退出：Ctrl+]
 
 ## 6.5 无线这条路（已打通，可选继续）
 
-片内 C6 + ESP-Hosted **已经端到端验证**：链路 **5.44 MB/s / 43.5 Mbps**（60 s 长跑，
-ping RTT 4.5 ms），端到端投屏 **60 fps、0 丢帧**（TCP JPEG → 硬件解码 → i80 双缓冲）。
+片内 C6 + ESP-Hosted **已经端到端验证**：端到端投屏 **60 fps、0 丢帧**
+（TCP JPEG → 硬件解码 → i80 双缓冲），ping RTT 4.5 ms。
 演示工程在工作区 `../p4_wireless_display/`，链路探针与完整证据链在
 `../p4_wifi_probe/`（`FINDINGS.md`）。
+
+链路吞吐（**数字随协议模式变，引用时必须带条件**）：
+- 从机 **2.12.13**（兼容模式）：单次 **60 s** 长跑 **5.44 MB/s（43.5 Mbps）**；
+- 从机 **3.0.9**（与 host 同版本、`SDIO SW_AGGR` 生效）：连测 3 次
+  **4.95 / 5.01 / 5.03 MB/s（约 40 Mbps）**。
+两组都在 480x320 JPEG 的需求（60 fps 只要 0.66 MB/s）之上好几倍；谁更高**没有做 A/B**，
+不许把 5.44 当成"当前性能"。细节见 `notes/wifi-over-c6-hosted.md`。
 
 **唯一硬约束**：host 组件用 `espressif/esp_hosted "~3"` —— IDF 官方例子给 P4 钉的
 `"~2"` 在本板上数据面直接崩（`0x102` → `Unrecoverable host sdio state`）。
@@ -117,8 +124,14 @@ ping RTT 4.5 ms），端到端投屏 **60 fps、0 丢帧**（TCP JPEG → 硬件
 coprocessor=3.0.9 (match)`，`SDIO SW_AGGR` 协商成功，版本警告消失；
 两套从机镜像（3.0.9 与旧 2.12.13）都留档在 `../p4_wifi_ota/c6_firmware/`，可随时回退。
 
-想继续做的话：桌面采集实时投屏（取代现在的合成动画）、或 UDP + 丢帧策略换更低延迟
-（当前 114 fps 的量测上限是 TCP 往返/窗口限制的，设备内部能到 ~175 fps）。
+想继续做的话：
+
+1. **桌面实时投屏已经打通** ✓ —— PC 侧经门户采真桌面、面板上是 mirror；坑与配方见
+   `notes/wayland-portal-capture.md`（**授权框必须选第一项 `Share "<monitor>"`**；
+   管道必须先钉源 caps）。确认测量（画面在动）：**818 帧 / 38.81 s = 21.1 fps、
+   0.53 MB/s、0 次中途退出**；静止画面时 ~1.8 fps 属预期（`drop-only`）。
+2. UDP + 丢帧策略换更低延迟（当前 114 fps 的量测上限是 TCP 往返/窗口限制的，
+   设备内部能到 ~175 fps）。
 
 ## 7. 提交前要处理的事
 

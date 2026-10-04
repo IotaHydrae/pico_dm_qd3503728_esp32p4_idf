@@ -1,6 +1,7 @@
 # 知识库索引
 
-**范围**：ESP32-P4 移植（`pico_dm_qd3503728_esp32p4_idf`）的实测结论与踩坑。
+**范围**：ESP32-P4 移植（`pico_dm_qd3503728_esp32p4_idf`）的实测结论与踩坑
+（含无线投屏的 **PC 采集侧**：`wayland-portal-capture.md`）。
 ESP32-S3 那份在 `../pico_dm_qd3503728_esp32s3_idf/notes/`；跨项目可复用的通用结论
 放在 `general/`（将来工作区建统一知识库时整体上移）。交接与下一步在 `../HANDOFF.md`。
 
@@ -14,6 +15,7 @@ ESP32-S3 那份在 `../pico_dm_qd3503728_esp32s3_idf/notes/`；跨项目可复�
 | [jpeg-hardware-decode.md](jpeg-hardware-decode.md) | P4 硬件 JPEG 解码多快？缓冲放哪？怎么零拷贝上屏？ |
 | [pin-map.md](pin-map.md) | 面板/触模接到哪些 GPIO？冲突审计的结论是什么？ |
 | [wifi-over-c6-hosted.md](wifi-over-c6-hosted.md) | 这块板的 WiFi 怎么起来？C6 要刷吗？吞吐多少？ |
+| [wayland-portal-capture.md](wayland-portal-capture.md) | PC 侧怎么采到**真桌面**？门户授权框该选哪一项？为什么必须钉源的 caps？ |
 | [general/esp-idf-i80-pclk-divider.md](general/esp-idf-i80-pclk-divider.md) | 为什么 `pclk_hz` 请求 50 MHz 实际跑 80 MHz？ |
 | [general/esp-idf-i80-transfer-overhead.md](general/esp-idf-i80-transfer-overhead.md) | 为什么小笔刷屏白扔带宽？每笔的固定开销从哪来？ |
 | [general/esp32p4-dma-buffer-placement.md](general/esp32p4-dma-buffer-placement.md) | P4 上 DMA 缓冲能放 PSRAM 吗？哪些外设强制要 PSRAM？ |

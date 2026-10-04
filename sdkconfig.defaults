@@ -1,0 +1,26 @@
+# ESP32-P4 bring-up skeleton.
+#
+# PSRAM: unlike the ESP32-S3 board, nothing here drives a panel bus yet, so
+# there is no pin conflict to worry about *yet*.  Per the lesson from the S3
+# port, settle that question before wiring any panel to this chip -- see
+# AGENTS.md.
+# 本板芯片实测是 ESP32-P4 rev v1.0，而 IDF/示例默认按 rev3.x 编：
+# 不设这两条，烧写会被拒（'bootloader.bin' requires chip revision [v3.0 - v3.99]）。
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+CONFIG_ESP32P4_REV_MIN_100=y
+
+# 板载 16 MB flash（esptool 实测）。
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_SPEED_200M=y
+
+# Console on UART0 at the P4's default pins (U0TXD=GPIO37, U0RXD=GPIO38).
+# boot_request.c follows these two values, so a board that wires its USB-serial
+# bridge elsewhere only has to change them here.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_UART_TX_GPIO=37
+CONFIG_ESP_CONSOLE_UART_RX_GPIO=38
+
+# Keep the log readable while bringing a new board up.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

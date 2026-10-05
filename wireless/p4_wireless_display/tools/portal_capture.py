@@ -315,10 +315,16 @@ def portal_pipeline_cmd(fd, target, pin, fps, quality, save_dir=None, save_count
            # 色彩转换与缩放。实测同一条链的上限 131 fps → 214 fps（1920x1080 BGRA 输入）。
            # drop-only：只丢不复制 —— 静止画面不该重复发同一帧。
            "!", "videorate", "drop-only=true",
-           "!", "videoconvert", "!", "videoscale",
+           "!", "videoconvert",
+           # method=lanczos：默认是 bilinear（2-tap），对 4 倍下采样太糙 —— 实测文字区
+           # PSNR 16.37 → 18.39 dB、全图 21.93 → 23.17 dB，代价只有 CPU 慢 14% ✓
+           "!", "videoscale", "method=lanczos", "add-borders=true",
            # framerate 必须是整数分数（写 30.0/1 会让 caps 非法、pipeline 链接失败 ✗）；
-           # 显式给 format=I420，省得 videoscale 与 jpegenc 协商失败
-           "!", f"video/x-raw,format=I420,width={FRAME_W},height={FRAME_H},framerate={int(fps)}/1",
+           # 显式给 format=I420，省得 videoscale 与 jpegenc 协商失败；
+           # **pixel-aspect-ratio=1/1 必须写**：不写的话 videoscale 会去改 PAR（显示端就是
+           # 拉伸）而不是加黑边 —— 实测 16:9 被拉成 3:2，PSNR 只有 8.55 dB ✗（写上是 21.93）
+           "!", f"video/x-raw,format=I420,width={FRAME_W},height={FRAME_H},"
+                f"framerate={int(fps)}/1,pixel-aspect-ratio=1/1",
            "!", "jpegenc", f"quality={quality}"]
     if not save_dir:
         return cmd + ["!", "fdsink", "fd=1", "sync=true"]

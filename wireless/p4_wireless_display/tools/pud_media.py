@@ -19,7 +19,8 @@ VIDEO_EXT = (".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".ts", ".flv", ".g
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 
 # 保持比例、居中、补黑边到 480x320
-_FIT = (f"scale={FRAME_W}:{FRAME_H}:force_original_aspect_ratio=decrease,"
+# flags=lanczos：与投屏路径用同一种缩放核（默认 bicubic 偏软，且两条路径观感要一致）
+_FIT = (f"scale={FRAME_W}:{FRAME_H}:force_original_aspect_ratio=decrease:flags=lanczos,"
         f"pad={FRAME_W}:{FRAME_H}:(ow-iw)/2:(oh-ih)/2")
 
 

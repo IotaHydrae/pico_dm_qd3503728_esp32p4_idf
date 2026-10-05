@@ -32,10 +32,21 @@
 
 ```text
 pipewiresrc fd=<fd> <target> ! <pin> ! videorate drop-only=true
-  ! videoconvert ! videoscale
-  ! video/x-raw,format=I420,width=480,height=320,framerate=30/1
+  ! videoconvert ! videoscale method=lanczos add-borders=true
+  ! video/x-raw,format=I420,width=480,height=320,framerate=60/1,pixel-aspect-ratio=1/1
   ! jpegenc quality=75 ! fdsink fd=1 sync=true
 ```
+
+### 画质：三个都是实测出来的选择（"糊"要往这三处查，别先怀疑 JPEG 质量）
+
+| 项 | 数据（1920x1080 → 480x320，与 ffmpeg lanczos 理想下采样比 PSNR） |
+|---|---|
+| **`pixel-aspect-ratio=1/1` 必须显式写** | 不写时 videoscale 会去**改 PAR**（显示端=拉伸）而不是加黑边 ⇒ 16:9 被拉成 3:2，PSNR **8.55 dB**；写上是 **21.93 dB** ✓ |
+| `method=lanczos`（默认是 bilinear 2-tap） | 全图 **21.93 → 23.17 dB**、文字区 **16.37 → 18.39 dB**；代价 CPU +14%，字节 +83%（更锐的图本来就更难压）✓ |
+| `jpegenc quality` | 75 → 85 → 92 只涨 **+0.15 dB**（文字区 16.37/16.54/16.52），字节 +30~65% ⇒ **质量档不是这里的主因** ✗ |
+| 4-tap | 比 bilinear **更差**（21.00 dB）且更大 ✗ —— 别看到"tap 多"就选它 |
+
+根本限制是 **4 倍下采样**（1080p → 480x270）：文字这类高频内容必然软，剩下的只能靠选缩放核。
 
 - **`videorate` 放在转换器之前**：被丢掉的帧就不必再做一次 1080p 的色彩转换与缩放。
   上限实测 **131 → 214 fps**（另一种测法：120 帧输入 0.91 s → 0.57 s，两个测法一致）✓。

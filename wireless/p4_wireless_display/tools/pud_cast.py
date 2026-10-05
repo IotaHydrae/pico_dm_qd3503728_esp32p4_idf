@@ -47,7 +47,8 @@ def missing_deps():
 def main(argv=None):
     ap = argparse.ArgumentParser(description="把桌面投到 P4 无线显示器上")
     pudcli.add_common(ap)
-    ap.add_argument("--fps", type=float, default=30.0, help="目标帧率（上限 30）")
+    ap.add_argument("--fps", type=float, default=30.0,
+                    help="采集侧的帧率上限（实际速率还取决于屏幕变化量：静止画面不出帧）")
     ap.add_argument("--quality", type=int, default=75, help="JPEG 质量 1~100")
     ap.add_argument("--seconds", type=float, default=0.0, help="投多久；0 = 到 Ctrl-C")
     ap.add_argument("--save-frames", default="",
@@ -70,13 +71,21 @@ def main(argv=None):
         if not args.quiet:
             print(f"  [采集] {msg}", flush=True)
 
+    recv = {"n": 0}
+
+    def counted(frames):
+        """数一下采集侧到底给了多少帧（和送出的帧数对比就知道是谁在限）。"""
+        for jpeg in frames:
+            recv["n"] += 1
+            yield jpeg
+
     frames = portal_capture.screen_frames(fps=args.fps, quality=args.quality,
                                           save_dir=args.save_frames, on_status=status)
     try:
-        # 投屏用 drop：来快了就丢，别排队（排队 = 画面越来越旧）
-        return pudcli.run_stream(sender, frames, args, label="投屏",
-                                 stop_after_seconds=args.seconds,
-                                 fps=args.fps, pace="drop")
+        # pace="none"：采集侧 `videorate drop-only` 已经按帧率语义限过了，
+        # 发送侧再按"到达时刻"丢一次会把一帧里的最新帧丢掉（= 给直播加延迟 ✗）
+        return pudcli.run_stream(sender, counted(frames), args, label="投屏",
+                                 stop_after_seconds=args.seconds, recv=recv)
     except RuntimeError as exc:                 # 采集侧彻底起不来 = 环境问题
         print(f"采集失败：{exc}", file=sys.stderr)
         return pudcli.EXIT_ENVIRONMENT_ERROR

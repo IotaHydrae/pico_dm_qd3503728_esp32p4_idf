@@ -52,46 +52,42 @@ def open_sender(args, host, check_reachable=True):
 
 
 def run_stream(sender, frames, args, label, stop_after_seconds=0.0,
-               fps=0.0, pace="drop"):
+               fps=0.0, pace="none", recv=None):
     """通用发送循环：一帧帧发出去，每秒报一次进度；Ctrl-C 正常收尾。
 
-    `frames` 是产出 JPEG 字节的可迭代对象。限速有两种语义，**不能混**：
+    `frames` 是产出 JPEG 字节的可迭代对象。`pace` 决定要不要在发送侧限速：
 
-    - `pace="drop"`（投屏用）：来快了就**丢**多余的帧。直播画面要的是低延迟，
-      排队等待只会让画面越来越旧；也省链路。
+    - `pace="none"`（**投屏用**）：来一帧发一帧，不排队也不额外丢。限速交给采集侧的
+      `videorate drop-only`（它是按帧率语义工作的，不会像"按到达时刻丢"那样把一帧里
+      **最新的那一帧**丢掉 —— 那等于给直播画面加了延迟 ✗，踩过）。
     - `pace="real"`（放视频用）：按 1/fps 的节奏**等**到时间点再发 ⇒ 3 秒的片子
-      真的播 3 秒。这里限速而不是信 ffmpeg 的 `-re`（实测它偏快 18% ✗）。
+      真的播 3 秒。限速放这里而不是信 ffmpeg 的 `-re`（实测它偏快 18% ✗）。
     """
     quiet = getattr(args, "quiet", False)
     t0 = time.monotonic()
     t_log, win, last = t0, 0, t0
-    period = 1.0 / fps if fps > 0 else 0.0
+    period = 1.0 / fps if (fps > 0 and pace == "real") else 0.0
     next_due = t0
-    dropped = 0
     try:
         for jpeg in frames:
             now = time.monotonic()
             if period:
-                if pace == "drop":
-                    if now < next_due:          # 还不到下一帧的时间点：丢掉这一帧
-                        dropped += 1
-                        continue
-                    next_due = now + period     # 以"实际发出"为基准，不累积欠账
-                else:
-                    nap = next_due - now
-                    if nap > 0:
-                        time.sleep(nap)
-                    next_due += period
+                nap = next_due - now
+                if nap > 0:
+                    time.sleep(nap)
+                next_due += period
             sender.send(jpeg)
             last = time.monotonic()
             win += 1
             if stop_after_seconds and last - t0 >= stop_after_seconds:
                 break
             if not quiet and last - t_log >= 1.0:
-                extra = f" | 丢 {dropped}" if dropped else ""
+                # 同时报"收到多少"：帧率上不去时，一眼能分清是源只在画面变化时出帧，
+                # 还是我们这边丢掉的（收到 >> 送出 = 采集/链路侧在丢）
+                got = f" | 收 {recv['n']}" if recv is not None else ""
                 print(f"  {label}: {win / (last - t_log):5.1f} fps | "
                       f"{sender.bytes / (last - t0) / 1e6:.2f} MB/s | "
-                      f"帧 {sender.frames - 1}{extra}", flush=True)
+                      f"帧 {sender.frames - 1}{got}", flush=True)
                 t_log, win = last, 0
     except KeyboardInterrupt:
         sender.interrupted = True     # 列表播放（视频/图片轮播）据此停掉整轮
@@ -103,9 +99,12 @@ def run_stream(sender, frames, args, label, stop_after_seconds=0.0,
     if sender.frames == 0:
         print(f"{label}：一帧都没发出去（采集侧没起来？看上面日志）", file=sys.stderr)
         return EXIT_FAIL
+    tail = ""
+    if recv is not None and recv["n"] > sender.frames:
+        tail = f"（采集侧收到 {recv['n']} 帧，其中 {recv['n'] - sender.frames} 帧在管道里被丢）"
     if total < 0.5:      # 太快（桩/瞬时源）：除出来的速率没有意义，别报假数
-        print(f"{label}结束：{sender.frames} 帧")
+        print(f"{label}结束：{sender.frames} 帧{tail}")
     else:
         print(f"{label}结束：{sender.frames} 帧 / {total:.1f} s "
-              f"（{sender.frames / total:.1f} fps，{sender.bytes / total / 1e6:.2f} MB/s）")
+              f"（{sender.frames / total:.1f} fps，{sender.bytes / total / 1e6:.2f} MB/s）{tail}")
     return EXIT_OK

@@ -31,11 +31,17 @@
 ## 2. 可用管道（面板上是真桌面 mirror）
 
 ```text
-pipewiresrc fd=<fd> <target> ! <pin> ! videoconvert ! videoscale
-  ! videorate drop-only=true
+pipewiresrc fd=<fd> <target> ! <pin> ! videorate drop-only=true
+  ! videoconvert ! videoscale
   ! video/x-raw,format=I420,width=480,height=320,framerate=30/1
   ! jpegenc quality=75 ! fdsink fd=1 sync=true
 ```
+
+- **`videorate` 放在转换器之前**：被丢掉的帧就不必再做一次 1080p 的色彩转换与缩放。
+  上限实测 **131 → 214 fps**（另一种测法：120 帧输入 0.91 s → 0.57 s，两个测法一致）✓。
+  踩过：放在后面时，PC 侧算力全花在"马上要被丢掉"的帧上，投屏帧率上不去。
+- `gst-launch` **不接受连续两个 capsfilter**（`! caps ! caps` 报 `no element "video"`）
+  —— 调试时把两段 caps 并成一段，别以为是元素名写错了。
 
 - `<pin>` = 节点声明变体的**并集**，例：`video/x-raw,format={BGRA,BGRx},width=1920,height=1080`。
 - **不要钉帧率**：节点是 `framerate=0/1` + `max-framerate=60/1`，钉 `10/1` 实测直接

@@ -61,7 +61,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="把图片显示到 P4 无线显示器上")
     ap.add_argument("path", help="图片文件，或装着图片的目录")
     pudcli.add_common(ap)
-    ap.add_argument("--quality", type=int, default=60, help="JPEG 质量 1~100")
+    ap.add_argument("--quality", type=int, default=85, help="JPEG 质量 1~100（越大越好；默认 85 ⇒ ffmpeg -q:v 6）")
     ap.add_argument("--seconds", type=float, default=10.0, help="轮播时每张停几秒")
     ap.add_argument("--once", action="store_true", help="目录只轮一遍（默认一直轮）")
     args = ap.parse_args(argv)

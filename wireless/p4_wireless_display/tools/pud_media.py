@@ -15,6 +15,18 @@ import subprocess
 
 from pudnet import FRAME_W, FRAME_H
 
+def qscale(quality):
+    """用户侧 quality（1~100，**越大越好**）→ ffmpeg 的 `-q:v`（**1~31，越小越好**）。
+
+    这两个刻度是反的，踩过：把 1~100 的质量值直接当 `-q:v` 传，ffmpeg 夹到 31（最差）
+    —— 480x320 每帧只剩 3.2 KB，画面糊成一片 ✗。实测同一帧：q:v 2/5/10/20/31 ⇒
+    29.1/19.7/12.6/7.2/3.2 KB（相对 q:v=2 是 99/41/35/31/28 dB）。
+    MJPEG 的甜区大约在 q:v 2~10，对应这里的 quality ≈ 75~100。
+    """
+    q = max(1, min(100, int(quality)))
+    return max(2, min(31, round(31 - (q - 1) / 99 * 29)))
+
+
 VIDEO_EXT = (".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".ts", ".flv", ".gif")
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff")
 
@@ -42,7 +54,7 @@ def video_stream(path, fps=30.0, quality=60, loop=True):
     if loop:
         args += ["-stream_loop", "-1"]
     args += ["-i", path, "-an", "-vf", f"{_FIT},fps={fps}", "-pix_fmt", "yuvj420p",
-             "-q:v", str(quality), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
+             "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
     return _ffmpeg(args)
 
 
@@ -51,7 +63,7 @@ def image_jpeg(path, quality=60):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
     proc = _ffmpeg(["-i", path, "-frames:v", "1", "-vf", _FIT, "-pix_fmt", "yuvj420p",
-                    "-q:v", str(quality), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
+                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
     data, _ = proc.communicate()
     if not data:
         raise RuntimeError(f"ffmpeg 没解出图：{path}")
@@ -62,7 +74,7 @@ def testsrc_stream(fps=30.0, quality=60):
     """合成测试图（永远可用，不需要任何输入文件）—— 测试与自检用。"""
     return _ffmpeg(["-f", "lavfi", "-i", f"testsrc=size={FRAME_W}x{FRAME_H}:"
                                        f"rate={fps}", "-pix_fmt", "yuvj420p",
-                    "-q:v", str(quality), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
+                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
 
 
 def kind_of(path):

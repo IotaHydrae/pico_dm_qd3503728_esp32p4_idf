@@ -33,7 +33,11 @@ tools/pud_image.py ~/Pictures/ --seconds 10   # 目录轮播
 - 图片/视频/投屏一律**保持比例加黑边**缩放到 480x320（不拉扁）。投屏侧用
   `videoscale method=lanczos` + 显式 `pixel-aspect-ratio=1/1`：默认的 bilinear 对 4 倍
   下采样太糙，而且不写 PAR 时 GStreamer 会**拉伸**而不是加黑边（实测 PSNR 8.55 → 23.17 dB）。
-  **JPEG 质量档不是主因**（75→92 只涨 0.15 dB）；想更锐就该动缩放核，不是动 quality。
+  **投屏这条路的 JPEG 质量档不是主因**（gst `quality` 75→92 只涨 0.15 dB）；想更锐就该动
+  缩放核，不是动 quality。
+- 图片/视频走 ffmpeg，`--quality` 是 **1~100（越大越好，默认 85）**，内部映射到 ffmpeg 的
+  `-q:v`（**1~31 且越小越好**）—— 这两个刻度是反的，直接传会把画面压成 3.2 KB/帧（糊）✗。
+  实测同一帧：`--quality 85` ⇒ 37 KB/帧、32.3 dB、25 fps 下约 0.9 MB/s。
 - 退出码：0 成功 / 2 用法错 / 3 环境问题（设备不通、缺 ffmpeg/gst/gi）。
 
 ## 目录结构

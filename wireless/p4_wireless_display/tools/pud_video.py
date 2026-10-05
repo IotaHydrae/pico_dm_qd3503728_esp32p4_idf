@@ -33,6 +33,7 @@ def play_one(sender, path, args, loop):
         # 放视频用 real：按 1/fps 等时间点 ⇒ 3 秒的片子真的播 3 秒
         return pudcli.run_stream(sender, jpegs_from(proc.stdout), args,
                                  label=os.path.basename(path),
+                                 stop_after_seconds=args.seconds,
                                  fps=args.fps, pace="real")
     finally:
         proc.terminate()
@@ -61,8 +62,10 @@ def main(argv=None):
     ap.add_argument("path", help="视频文件，或装着视频的目录")
     pudcli.add_common(ap)
     ap.add_argument("--fps", type=float, default=30.0, help="投出去的帧率（上限 30）")
-    ap.add_argument("--quality", type=int, default=60, help="JPEG 质量 1~100")
+    ap.add_argument("--quality", type=int, default=85, help="JPEG 质量 1~100（越大越好；默认 85 ⇒ ffmpeg -q:v 6）")
     ap.add_argument("--once", action="store_true", help="播一遍就退出（默认循环）")
+    ap.add_argument("--seconds", type=float, default=0.0,
+                    help="最多播几秒（0 = 不限；目录播放时对每个文件各自计时）")
     args = ap.parse_args(argv)
 
     if not os.path.exists(args.path):

@@ -36,9 +36,27 @@ _FIT = (f"scale={FRAME_W}:{FRAME_H}:force_original_aspect_ratio=decrease:flags=l
         f"pad={FRAME_W}:{FRAME_H}:(ow-iw)/2:(oh-ih)/2")
 
 
-def _ffmpeg(args):
+def _ffmpeg(args, capture_stderr=False):
+    """起一个 ffmpeg。长跑的那两个（视频/合成源）把 stderr 收进管道：
+
+    我们主动停止时 ffmpeg 正在写而被掐断，会打一堆 `Broken pipe` —— 那是**收尾噪声，不是
+    故障**，但看起来像错误 ✗。收进管道后只在"一帧都没出"时才回显（见 pud_video.py）。
+    图片是一次性的，stderr 直接透传，出问题当场可见。
+    """
     return subprocess.Popen(["ffmpeg", "-hide_banner", "-loglevel", "error"] + args,
-                            stdout=subprocess.PIPE)
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE if capture_stderr else None)
+
+
+def ffmpeg_stderr(proc, limit=400):
+    """取长跑 ffmpeg 的 stderr（失败时回显用）。"""
+    if proc.stderr is None:
+        return ""
+    try:
+        data = proc.stderr.read() or b""
+    except Exception:
+        return ""
+    return data.decode(errors="replace")[-limit:].strip()
 
 
 def video_stream(path, fps=30.0, quality=60, loop=True):
@@ -55,7 +73,7 @@ def video_stream(path, fps=30.0, quality=60, loop=True):
         args += ["-stream_loop", "-1"]
     args += ["-i", path, "-an", "-vf", f"{_FIT},fps={fps}", "-pix_fmt", "yuvj420p",
              "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
-    return _ffmpeg(args)
+    return _ffmpeg(args, capture_stderr=True)
 
 
 def image_jpeg(path, quality=60):
@@ -63,7 +81,8 @@ def image_jpeg(path, quality=60):
     if not os.path.exists(path):
         raise FileNotFoundError(path)
     proc = _ffmpeg(["-i", path, "-frames:v", "1", "-vf", _FIT, "-pix_fmt", "yuvj420p",
-                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
+                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                   capture_stderr=True)
     data, _ = proc.communicate()
     if not data:
         raise RuntimeError(f"ffmpeg 没解出图：{path}")
@@ -74,7 +93,8 @@ def testsrc_stream(fps=30.0, quality=60):
     """合成测试图（永远可用，不需要任何输入文件）—— 测试与自检用。"""
     return _ffmpeg(["-f", "lavfi", "-i", f"testsrc=size={FRAME_W}x{FRAME_H}:"
                                        f"rate={fps}", "-pix_fmt", "yuvj420p",
-                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"])
+                    "-q:v", str(qscale(quality)), "-f", "image2pipe", "-vcodec", "mjpeg", "-"],
+                   capture_stderr=True)
 
 
 def kind_of(path):

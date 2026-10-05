@@ -31,10 +31,15 @@ def play_one(sender, path, args, loop):
         return pudcli.EXIT_INVALID_USAGE
     try:
         # 放视频用 real：按 1/fps 等时间点 ⇒ 3 秒的片子真的播 3 秒
-        return pudcli.run_stream(sender, jpegs_from(proc.stdout), args,
-                                 label=os.path.basename(path),
-                                 stop_after_seconds=args.seconds,
-                                 fps=args.fps, pace="real")
+        rc = pudcli.run_stream(sender, jpegs_from(proc.stdout), args,
+                               label=os.path.basename(path),
+                               stop_after_seconds=args.seconds,
+                               fps=args.fps, pace="real")
+        if rc != pudcli.EXIT_OK:        # 只在真失败时回显 ffmpeg 的 stderr
+            err = pud_media.ffmpeg_stderr(proc)
+            if err:
+                print(f"ffmpeg: {err}", file=sys.stderr)
+        return rc
     finally:
         proc.terminate()
 

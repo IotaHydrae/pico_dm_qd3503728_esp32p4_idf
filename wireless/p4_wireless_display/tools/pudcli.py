@@ -65,7 +65,7 @@ def run_stream(sender, frames, args, label, stop_after_seconds=0.0,
     """
     quiet = getattr(args, "quiet", False)
     t0 = time.monotonic()
-    t_log, win, last = t0, 0, t0
+    t_log, win, win_bytes, last = t0, 0, 0, t0
     period = 1.0 / fps if (fps > 0 and pace == "real") else 0.0
     next_due = t0
     try:
@@ -79,16 +79,19 @@ def run_stream(sender, frames, args, label, stop_after_seconds=0.0,
             sender.send(jpeg)
             last = time.monotonic()
             win += 1
+            win_bytes += len(jpeg)
             if stop_after_seconds and last - t0 >= stop_after_seconds:
                 break
             if not quiet and last - t_log >= 1.0:
                 # 同时报"收到多少"：帧率上不去时，一眼能分清是源只在画面变化时出帧，
                 # 还是我们这边丢掉的（收到 >> 送出 = 采集/链路侧在丢）
                 got = f" | 收 {recv['n']}" if recv is not None else ""
+                # 把"每帧多大"一起打出来：帧率×帧长才是带宽，省得再心算
                 print(f"  {label}: {win / (last - t_log):5.1f} fps | "
                       f"{sender.bytes / (last - t0) / 1e6:.2f} MB/s | "
-                      f"帧 {sender.frames - 1}{got}", flush=True)
-                t_log, win = last, 0
+                      f"{win_bytes / win / 1024:.0f} KB/帧 | 帧 {sender.frames - 1}{got}",
+                      flush=True)
+                t_log, win, win_bytes = last, 0, 0
     except KeyboardInterrupt:
         sender.interrupted = True     # 列表播放（视频/图片轮播）据此停掉整轮
         print()
@@ -106,5 +109,6 @@ def run_stream(sender, frames, args, label, stop_after_seconds=0.0,
         print(f"{label}结束：{sender.frames} 帧{tail}")
     else:
         print(f"{label}结束：{sender.frames} 帧 / {total:.1f} s "
-              f"（{sender.frames / total:.1f} fps，{sender.bytes / total / 1e6:.2f} MB/s）{tail}")
+              f"（{sender.frames / total:.1f} fps，{sender.bytes / total / 1e6:.2f} MB/s，"
+              f"平均 {sender.bytes / sender.frames / 1024:.0f} KB/帧）{tail}")
     return EXIT_OK

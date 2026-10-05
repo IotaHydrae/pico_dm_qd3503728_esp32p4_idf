@@ -17,7 +17,7 @@ idf.py -p /dev/ttyACM0 flash
 idf.py -p /dev/ttyACM0 monitor --no-reset     # 不加 --no-reset 会复位板子
 
 # PC 侧打流（用系统 python）
-/usr/bin/python3 net/throughput.py <设备IP> --seconds 10
+/usr/bin/python3 net/throughput.py <设备IP> --seconds 10   # 探针工程自己的脚本
 ```
 
 设备启动后会在串口打印自己的 IP 与 `TCP sink listening on port 5001`。

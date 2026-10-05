@@ -1,42 +1,30 @@
 #!/usr/bin/env python3
-"""PC 侧实时采集 → JPEG → 推给 P4 无线显示器（UDP 分片，与 send_frames.py 同格式）。
+"""门户采集库：xdg-desktop-portal ScreenCast → PipeWire → pipewiresrc → JPEG。
 
-    # ORACLE: REQUIREMENT
-    # SOURCE: 链路 4.95~5.03 MB/s；设备端 60 fps 只需 0.66 MB/s，150 fps 约 1.16 MB/s
-    # EXPECTED: >= 30 fps 端到端（设备侧 shown 判据），带宽 < 2 MB/s
+被 `pud_cast.py`（用户脚本）、`tools/portal_probe.py`（诊断工具）共用。
+**踩坑与结论都在 `../../notes/wayland-portal-capture.md`**，这里只放能跑的代码。
 
-采集源（`--source`）：
-  portal   Wayland 桌面（xdg-desktop-portal ScreenCast → PipeWire → pipewiresrc）。
-           **首次会弹权限对话框**：选"显示器/区域"那类选项，可以像截图一样划一块矩形。
-           采集管道不是写死的：先用一次短管道**探出节点真正提供的 caps**（格式 + 缓冲区
-           尺寸），把它钉在源上，再 videoconvert/videoscale/videorate 转成 480x320 I420。
-           不这么做的话下游 caps 会把源改写掉 ⇒ `no more input formats` / `-22` ✗。
-  video=<file>  视频文件（ffmpeg 解码 → 缩放 → JPEG）——不需要任何权限，用来验证管线。
-  testsrc  ffmpeg 合成测试图（同上，永远可用）。
+三条硬规则（不遵守就采不到真桌面，三条都是实测）：
 
-退出码（与工作区 testing skill 一致）：
-    0 PASS / 1 FAIL / 2 INVALID_USAGE / 3 ENVIRONMENT_ERROR / 4 TIMEOUT
-
-设计说明（为什么这么绕）：Wayland 下没有 X11 的 "抓 root window" 这条路（实测 XWayland
-的 root 是全黑 ✗），屏幕内容只能经 portal 授权后由 PipeWire 提供；而 portal 给的 PipeWire
-连接是**一个 fd**，必须由能收 fd 的客户端（这里用 PyGObject 的
-`call_with_unix_fd_list_sync`）拿到，再把它交给 `pipewiresrc fd=<n>`。
+1. 授权框必须选**真显示器**那一项（`Share "<monitor>"`，列表第一条、最大的那个）；
+   选 `virtual screen` 会得到一块新建的空屏，投屏照样"成功"但画面永远不是桌面。
+2. **先把源钉成"节点声明过的 caps"再转换**：`pipewiresrc` 的 src 模板 caps 是 `ANY`，
+   下游要什么它就把源 fixate 成什么 ⇒ 门户节点是固定尺寸/格式的，直接要 I420 480x320
+   会 `no more input formats` / `set output format: -22` 整条死。尺寸钉死、格式取
+   声明并集、**帧率不钉**（节点是 0/1）。
+3. 连接标识优先 `target-object=<object.serial>`：`path=<数字 id>` 实测会在流跑到一半
+   重新解析失败（`target not found`）。
 """
 
-import argparse
 import json
 import os
 import re
 import signal
-import socket
-import struct
 import subprocess
-import sys
 import time
 
-W, H = 480, 320
-UDP_PAYLOAD = 1400
-HDR = struct.Struct("<IHHI")          # 与设备端 udp_frag_hdr_t 一致
+from pudnet import FRAME_W, FRAME_H, jpegs_from
+
 PORTAL_BUS = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 SC = "org.freedesktop.portal.ScreenCast"
@@ -47,7 +35,6 @@ SRC_CAPS_RE = re.compile(r"pipewiresrc0\.GstPad:src: caps = (.+)")
 CAPS_FIELDS = ("format", "width", "height", "framerate")
 CAPS_FIELD_RE = {f: re.compile(rf"\b{f}=\((?:string|int|fraction)\)([^,]+)")
                  for f in CAPS_FIELDS}
-
 
 def node_enum_formats(params):
     """从 pw-dump 的节点 params 里抽 EnumFormat，返回 [{width,height,formats,dma_buf}]。
@@ -166,7 +153,7 @@ def open_screencast_session(timeout_s=120):
     流程（每一步都要等 Request 对象的 Response 信号，screen 上可能弹权限框）：
       CreateSession → SelectSources(1=MONITOR) → Start
     取 fd 是**另一步**（`open_pipewire_remote`），拆开是为了能在同一个会话里反复取 fd：
-    多个候选管道共用一次用户授权（见 net/probe_portal.py）。
+    多个候选管道共用一次用户授权（见 tools/portal_probe.py）。
     """
     try:
         from gi.repository import Gio, GLib
@@ -270,12 +257,6 @@ def open_pipewire_remote(bus, session_handle):
     return fds.get(0)
 
 
-def open_portal_screencast(timeout_s=120):
-    """(pipewire_fd, node_id) —— 一次性拿 fd 的简单入口（--probe 用）。"""
-    bus, session_handle, streams = open_screencast_session(timeout_s)
-    return open_pipewire_remote(bus, session_handle), streams[0][0]
-
-
 def discover_portal_caps(bus, session_handle, node, timeout_s=5.0, retries=3):
     """探出门户节点**真正提供**的 caps（格式 + 缓冲区尺寸），返回 parse_src_caps 的结果。
 
@@ -336,7 +317,7 @@ def portal_pipeline_cmd(fd, target, pin, fps, quality, save_dir=None, save_count
            "!", "videorate", "drop-only=true",
            # framerate 必须是整数分数（写 30.0/1 会让 caps 非法、pipeline 链接失败 ✗）；
            # 显式给 format=I420，省得 videoscale 与 jpegenc 协商失败
-           "!", f"video/x-raw,format=I420,width={W},height={H},framerate={int(fps)}/1",
+           "!", f"video/x-raw,format=I420,width={FRAME_W},height={FRAME_H},framerate={int(fps)}/1",
            "!", "jpegenc", f"quality={quality}"]
     if not save_dir:
         return cmd + ["!", "fdsink", "fd=1", "sync=true"]
@@ -364,119 +345,50 @@ def resolve_portal_pin(bus, session_handle, node):
     return pin, f"gst 探测协商出的 caps {fields.get('raw')}"
 
 
-def spawn_portal_capture(bus, session_handle, target, pin, args):
+def spawn_portal_capture(bus, session_handle, target, pin, fps=30.0, quality=75,
+                         save_dir="", save_count=6):
     """起一条采集管道（**不做存活判断**，由调用方按"有没有出帧"判断）。
 
     故意不在这里等待：一启动就得开始读 stdout，否则子进程写满管道会阻塞、攒下的帧在
     我们开始读时一次性涌出，把 fps 算成几百（实测 17 帧挤进 0.03 s ✗）。
     """
     fd = open_pipewire_remote(bus, session_handle)
-    cmd = portal_pipeline_cmd(fd, target, pin, args.fps, args.jpeg_quality,
-                              save_dir=args.save_frames, save_count=args.save_count)
+    cmd = portal_pipeline_cmd(fd, target, pin, fps, quality,
+                              save_dir=save_dir, save_count=save_count)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, pass_fds=(fd,))
     os.close(fd)
     return proc
 
+def screen_frames(fps=30.0, quality=75, save_dir="", save_count=6, max_attempts=4,
+                  on_status=None):
+    """生成器：产出门户采到的 JPEG 帧（授权、caps 发现、重启监督都在里面）。
 
-def build_capture(args):
-    """返回 (starters, 说明)：每个 starter 是"起一条采集管道"的零参调用。
-
-    portal 路径给出**多个** starter（不同的连接目标写法，按可靠性排序），
-    ffmpeg 路径只有一个。调用方按顺序轮着试，死了就换下一种写法重来。
+    调用方只需要 `for jpeg in screen_frames(...)`：授权一次、caps 自动发现、
+    管道自己死掉就换连接写法重起。`on_status` 收到人类可读的状态行（给 CLI 打印用）。
     """
-    if args.source.startswith("video="):
-        path = args.source.split("=", 1)[1]
-        if not os.path.exists(path):
-            raise RuntimeError(f"视频文件不存在：{path}")
-        # -pix_fmt yuvj420p 是**必须**的：ffmpeg 默认的 MJPEG 采样因子（三个分量都 h=1,v=2）
-        # P4 硬件解码器不认（实测 "Sampling factor cannot be recognized" ✗）；
-        # 标准 4:2:0 才与已验证可解的 PIL subsampling=2 一致 ✓
-        cmd = ["ffmpeg", "-loglevel", "error", "-re", "-stream_loop", "-1", "-i", path,
-               "-an", "-vf", f"scale={W}:{H},fps={args.fps}", "-pix_fmt", "yuvj420p",
-               "-q:v", str(args.qscale), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
-        return [(lambda: subprocess.Popen(cmd, stdout=subprocess.PIPE), "ffmpeg 解码文件")], "video"
-    if args.source == "testsrc":
-        cmd = ["ffmpeg", "-loglevel", "error", "-re", "-f", "lavfi",
-               "-i", f"testsrc=size={W}x{H}:rate={args.fps}", "-pix_fmt", "yuvj420p",
-               "-q:v", str(args.qscale), "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
-        return [(lambda: subprocess.Popen(cmd, stdout=subprocess.PIPE), "ffmpeg 合成测试图")], "testsrc"
+    def status(msg):
+        if on_status:
+            on_status(msg)
 
-    # portal：一次授权；要钉什么 caps 优先从 pw-dump 读（不占连接），再起采集管道
     bus, session_handle, streams = open_screencast_session()
     node = streams[0][0]
-    if args.gst_pipeline:
-        def start_override():
-            fd = open_pipewire_remote(bus, session_handle)
-            cmd = (args.gst_pipeline.replace("{fd}", str(fd))
-                   .replace("{node}", str(node)).split())
-            if cmd[0] != "gst-launch-1.0":        # 允许只写 "pipewiresrc ... ! ..."
-                cmd = ["gst-launch-1.0", "-q"] + cmd
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, pass_fds=(fd,))
-            os.close(fd)
-            return proc
-        return [(start_override, "自定义 --gst-pipeline")], "override"
-
+    status(f"门户流: {streams[0][1]}")
     info = read_node_info(node)
     pin, how = resolve_portal_pin(bus, session_handle, node)
+    status(f"源 caps（{how}）")
+    status(f"钉住: {pin}")
     targets = target_variants(node, info)
-    print(f"源 caps（{how}）", flush=True)
-    print(f"钉住: {pin}", flush=True)
-    print(f"连接目标写法（按可靠性排序）: {targets}", flush=True)
-    if args.save_frames:
-        print(f"最后 {args.save_count} 张 JPEG 存到 {args.save_frames}/（用来验帧内容）",
-              flush=True)
-    starters = [(lambda t=t: spawn_portal_capture(bus, session_handle, t, pin, args), t)
-                for t in targets]
-    return starters, "portal"
+    status(f"连接目标: {targets}")
 
-
-def pump(proc, sock, deadline, state):
-    """读一帧发一帧；返回这一轮的事实（时间戳是真的：一启动就读 stdout，不先盲等）。
-
-    帧号 state["idx"] 跨轮次累加，所以设备侧看到的帧号始终单调，重启不会造成回绕。
-    """
-    t_first = t_last = None
-    frames = sent = 0
-    t_log, win = time.monotonic(), 0
-    for jpeg in jpeg_frames(proc.stdout):
-        now = time.monotonic()
-        if deadline and now >= deadline:
-            break
-        if sock is not None:
-            cnt = (len(jpeg) + UDP_PAYLOAD - 1) // UDP_PAYLOAD
-            for i in range(cnt):
-                chunk = jpeg[i * UDP_PAYLOAD:(i + 1) * UDP_PAYLOAD]
-                sock.send(HDR.pack(state["idx"] & 0xFFFFFFFF, i, cnt, len(jpeg)) + chunk)
-            sent += len(jpeg)
-        if t_first is None:
-            t_first = now
-        t_last = now
-        state["idx"] += 1
-        frames += 1
-        win += 1
-        if now - t_log >= 1.0:
-            print(f"  {win/(now-t_log):5.1f} fps | frame {state['idx']-1} | {len(jpeg)} B",
-                  flush=True)
-            t_log, win = now, 0
-    return {"frames": frames, "sent": sent, "t_first": t_first, "t_last": t_last}
-
-
-def run_capture(args, sock, starters, deadline):
-    """按目标写法轮着起采集管道，直到用满时间预算或轮次用尽；返回 (state, runs)。"""
-    state = {"idx": 0}
-    runs, interrupted = [], False
-    for k in range(args.max_attempts):
-        if deadline and time.monotonic() >= deadline:
-            break
-        start, label = starters[k % len(starters)]
-        print(f"采集管道：{label}（第 {k + 1} 轮）", flush=True)
-        proc = start()
-        before = state["idx"]
-        stats = {}
+    for attempt in range(max_attempts):
+        target = targets[attempt % len(targets)]
+        status(f"采集管道: {target}（第 {attempt + 1} 轮）")
+        proc = spawn_portal_capture(bus, session_handle, target, pin, fps, quality,
+                                    save_dir, save_count)
+        gst_rc = None
         try:
-            stats = pump(proc, sock, deadline, state)
-        except KeyboardInterrupt:
-            interrupted = True
+            for jpeg in jpegs_from(proc.stdout):
+                yield jpeg
         finally:
             gst_rc = proc.poll()          # 先判"是不是自己死的"，再收尾
             proc.terminate()
@@ -484,143 +396,7 @@ def run_capture(args, sock, starters, deadline):
                 proc.wait(timeout=3)
             except Exception:
                 proc.kill()
-        stats.update({"label": label, "gst_exit": gst_rc, "died": gst_rc is not None,
-                      "frames_this_round": state["idx"] - before})
-        runs.append(stats)
-        if interrupted or (deadline and time.monotonic() >= deadline):
-            break                       # 时间到，正常收尾
-        if not stats["died"]:
-            break                       # 自己不退也不到点：等下一次循环继续用同一条
-        print(f"  管道自己退出了（exit={gst_rc}），换下一种连接写法重来", flush=True)
-    return state, runs
-
-
-def jpeg_frames(stream):
-    """从 MJPEG 字节流里切出完整 JPEG（按 SOI/EOI 标记，够用且不依赖容器格式）。"""
-    buf = bytearray()
-    while True:
-        chunk = stream.read(65536)
-        if not chunk:
-            return
-        buf += chunk
-        while True:
-            s = buf.find(b"\xff\xd8")
-            e = buf.find(b"\xff\xd9", s + 2) if s >= 0 else -1
-            if s < 0 or e < 0:
-                if len(buf) > 4 * 1024 * 1024:      # 找不到边界就丢，避免无限增长
-                    del buf[:-1024]
-                break
-            yield bytes(buf[s:e + 2])
-            del buf[:e + 2]
-
-
-def main() -> int:
-    ap = argparse.ArgumentParser(description="live capture -> JPEG -> P4 display")
-    ap.add_argument("host")
-    ap.add_argument("--source", default="portal",
-                    help="portal | testsrc | video=<file>")
-    ap.add_argument("--port", type=int, default=5002)
-    ap.add_argument("--fps", type=float, default=30.0, help="capture/encode rate")
-    ap.add_argument("--jpeg-quality", type=int, default=75, help="gst jpegenc (portal)")
-    ap.add_argument("--qscale", type=int, default=5, help="ffmpeg JPEG qscale (2..31)")
-    ap.add_argument("--seconds", type=float, default=0.0, help="0 = until Ctrl-C")
-    ap.add_argument("--dry-run", action="store_true",
-                    help="只采集+编码，不发送（用来单独量 PC 侧成本）")
-    ap.add_argument("--min-fps", type=float, default=30.0, help="PASS 阈值（PC 侧编码帧率）")
-    ap.add_argument("--json", action="store_true")
-    ap.add_argument("--probe", action="store_true",
-                    help="只做 portal 握手，然后用最简 gst 管道试协商（配合 GST_DEBUG=3 用）")
-    ap.add_argument("--gst-pipeline", default="", help="覆盖默认的 gst 管道（含 fd/path 占位）")
-    ap.add_argument("--save-frames", default="",
-                    help="portal 路径下：额外把最后 N 张 JPEG 落盘（验帧内容用）")
-    ap.add_argument("--save-count", type=int, default=6, help="落盘保留的帧数")
-    ap.add_argument("--max-attempts", type=int, default=4,
-                    help="采集管道自己死掉后最多重起多少轮（每轮换一种连接目标写法）")
-    args = ap.parse_args()
-
-    if args.probe:
-        try:
-            fd, node = open_portal_screencast()
-        except RuntimeError as e:
-            print(f"ENVIRONMENT_ERROR: {e}", file=sys.stderr)
-            return 3
-        print(f"portal: pipewire fd={fd} node={node}", flush=True)
-        if args.gst_pipeline:
-            cmd = args.gst_pipeline.replace("{fd}", str(fd)).replace("{node}", str(node)).split()
-            if cmd[0] != "gst-launch-1.0":        # 允许只写 "pipewiresrc ... ! ..."
-                cmd = ["gst-launch-1.0", "-v", "-m"] + cmd
-        else:
-            cmd = ["gst-launch-1.0", "-v", "-m", "pipewiresrc", f"fd={fd}", f"path={node}",
-                   "!", "videoconvert", "!", "fakesink", "sync=false"]
-        print("probe:", " ".join(cmd), flush=True)
-        try:
-            # 管道一直跑才算成功；超时被 kill 是预期结果，不是失败
-            rc = subprocess.call(cmd, pass_fds=(fd,), timeout=12)
-            print(f"probe exit={rc}（非 0 而立刻退出 = 失败）", flush=True)
-        except subprocess.TimeoutExpired:
-            print("probe: 仍在运行 => 协商成功 ✓", flush=True)
-        return 0
-
-    try:
-        starters, _note = build_capture(args)
-    except RuntimeError as e:
-        print(f"ENVIRONMENT_ERROR: {e}", file=sys.stderr)
-        return 3
-
-    sock = None
-    if not args.dry_run:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.connect((args.host, args.port))
-
-    t0 = time.monotonic()          # 起点（含 ffmpeg/gst 初始化）
-    deadline = t0 + args.seconds if args.seconds > 0 else None
-    state, runs = run_capture(args, sock, starters, deadline)
-
-    frames = state["idx"]
-    sent = sum(r["sent"] for r in runs)
-    firsts = [r["t_first"] for r in runs if r["t_first"]]
-    lasts = [r["t_last"] for r in runs if r["t_last"]]
-    total = (lasts[-1] - firsts[0]) if (firsts and lasts) else 0.0
-    total = max(total, 1e-6)
-    fps = frames / total if firsts else 0.0
-    died = any(r["died"] for r in runs)
-    restarts = max(0, len(runs) - 1)
-
-    # 判据（ORACLE）：
-    #   ORACLE: 采集进程全程没自己退出 + 出帧率 >= 阈值
-    #   SOURCE: 阈值来自需求（链路 4.95~5.03 MB/s，60 fps 只需 0.66 MB/s）
-    #   EXPECTED: 屏幕有变化时 >= min_fps。`drop-only` 下静止画面不出帧是**预期行为**，
-    #             此时应把 --min-fps 降到 0，只验"链路活着、管道没死"
-    if died:
-        last_dead = [r for r in runs if r["died"]][-1]
-        verdict = "FAIL"
-        why = f"采集管道自己退出了（{last_dead['label']} exit={last_dead['gst_exit']}）"
-    elif fps >= args.min_fps:
-        verdict, why = "PASS", ""
-    else:
-        verdict, why = "FAIL", f"出帧率 {fps:.1f} < {args.min_fps}"
-    result = {"source": args.source, "frames": frames, "seconds": round(total, 3),
-              "fps": round(fps, 2), "mbyte_per_s": round(sent / total / 1e6, 3),
-              "min_fps_threshold": args.min_fps, "gst_died": died, "restarts": restarts,
-              "rounds": [{k: r[k] for k in ("label", "frames_this_round", "gst_exit", "died")}
-                         for r in runs],
-              "verdict": verdict}
-    if args.json:
-        print(json.dumps(result, ensure_ascii=False))
-    else:
-        # flush：日志可能是被 tee 到管道的（块缓冲），不加就可能丢最后这几行
-        print(f"{frames} frames in {total:.2f} s => {fps:.1f} fps "
-              f"({sent/total/1e6:.2f} MB/s)  [min {args.min_fps} fps]  {verdict}"
-              + (f"  ← {why}" if why else "")
-              + (f"  （重启过 {restarts} 次）" if restarts else ""), flush=True)
-        for r in runs:
-            print(f"  轮次 {r['label']}: 出帧 {r['frames_this_round']}, "
-                  f"gst exit {r['gst_exit']}", flush=True)
-        if frames and not died and fps < args.min_fps:
-            print("提示：`drop-only` 下帧率取决于屏幕变化量，静止画面不出帧；"
-                  "只看链路是否活着就加 --min-fps 0", flush=True)
-    return 0 if verdict == "PASS" else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+        if gst_rc is None:
+            return                        # 调用方主动停的：正常结束
+        status(f"  管道自己退出了（exit={gst_rc}），换连接写法重来")
+    raise RuntimeError(f"采集管道 {max_attempts} 轮都没起来：看上面 gst 的报错")

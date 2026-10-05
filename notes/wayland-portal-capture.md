@@ -58,7 +58,7 @@ pipewiresrc fd=<fd> <target> ! <pin> ! videoconvert ! videoscale
 每跑一次采集都要人在桌面上点一次授权框 ⇒ 一次只试一个管道太贵。做法：
 **同一个 portal 会话里反复 `OpenPipeWireRemote` 拿多条新 fd**，对同一个节点跑 N 个管道，
 总共只弹一次框；每个管道带 `-v`，失败时也能看到它到底协商成了什么。
-工具：本仓 `wireless/p4_wireless_display/net/probe_portal.py`。
+工具：本仓 `wireless/p4_wireless_display/tools/portal_probe.py`（只产事实）。
 
 一次定案的例子：`bare`（不约束任何 caps）报 `target not found`、`convert`（只加转换器）✓、
 `format-i420` / `rate-10` / `size-480x320` / `size-portal` / `full-old` 全

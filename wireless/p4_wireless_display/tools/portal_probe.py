@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Portal ScreenCast 会话只授权一次，对同一个会话跑一组"单变量" gst 管道。
+"""门户采集的**诊断工具**（只产事实，不下结论）：一次授权，跑一组单变量 gst 管道。
 
-为什么需要它：`send_screen.py --probe` 每次都要用户在桌面上重选一次源，一次只能试一个
+为什么需要它：手工一条条试管道时，每次都要用户在桌面上重选一次源，一次只能试一个
 管道；而 `set output format: -22` 这类协商问题**必须逐字段定位**（format / 尺寸 / 帧率
 各自单独试一遍）。本工具在同一个 portal 会话里反复 `OpenPipeWireRemote` 拿多条新连接，
 于是 N 个管道总共只弹**一次**授权框。
@@ -11,9 +11,9 @@
 （见工作区 skills/developer-testing）。
 
 用法：
-    /usr/bin/python3 net/probe_portal.py                 # 跑全套
-    /usr/bin/python3 net/probe_portal.py --list          # 只列实验项
-    /usr/bin/python3 net/probe_portal.py --only bare,size-480x320
+    python3 tools/portal_probe.py                 # 跑全套
+    /usr/bin/python3 tools/portal_probe.py --list          # 只列实验项
+    /usr/bin/python3 tools/portal_probe.py --only bare,size-480x320
 日志与 pw-dump 快照落在 --outdir（默认 /tmp/portal_probe/）。
 
 实验期间请让所选区域里**有东西在动**（视频/滚动的终端）：门户可能只在画面变化时出帧，
@@ -31,8 +31,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from send_screen import (parse_src_caps, caps_pin, node_enum_formats,   # noqa: E402
-                         open_screencast_session, open_pipewire_remote)
+from portal_capture import (parse_src_caps, caps_pin, node_enum_formats,   # noqa: E402
+                            open_screencast_session, open_pipewire_remote)
 
 # 每项只钉一个字段，用来分辨"门户到底不接受哪个字段"。
 # {src} = pipewiresrc 参数，{sink} = fakesink 参数，{w}/{h} = 门户报表里的区域尺寸。

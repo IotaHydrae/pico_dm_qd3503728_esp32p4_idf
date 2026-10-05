@@ -18,6 +18,7 @@ tools/pud_image.py --host <设备IP> --save-host
 
 ```bash
 tools/pud_cast.py                    # 投屏：桌面实时镜像（会弹一次系统授权框）
+tools/pud_cast.py --fps 30 --quality 60   # 省流量档（约 0.6 MB/s）
 tools/pud_video.py ~/Videos/clip.mp4  # 放视频（默认循环，Ctrl-C 停）
 tools/pud_image.py photo.jpg          # 显示一张图
 tools/pud_image.py ~/Pictures/ --seconds 10   # 目录轮播
@@ -77,7 +78,8 @@ idf.py -p /dev/ttyACM0 flash monitor   # 只看日志加 --no-reset，否则会�
 - 到 ~175 fps 时崩溃点正好等于设备流水线上限（5.67 ms/帧）⇒ 再快也没意义。
 - 全过程 **0 bad**：残帧从不喂给解码器（收到更新的帧号就直接丢弃未组装完的帧）。
 - 链路本身 4.95~5.03 MB/s（40 Mbps），见 `../p4_wifi_probe/FINDINGS.md`。
-- 桌面投屏（`pud_cast.py`）：818 帧 / 38.81 s = 21.1 fps / 0.53 MB/s、0 次中断 ——
+- 桌面投屏（`pud_cast.py`，默认 `--fps 60`）：画面活跃时**实测峰值 ~55 fps**；
+  早先一次含大量静止时段的 40 s 运行是 818 帧 / 38.81 s = 21.1 fps / 0.53 MB/s、0 次中断 ——
   **帧率取决于屏幕变化量**（静止 0.8~2 fps、拖动/播放时 36~72 fps），静止时的低帧率是预期行为。
 
 **测量陷阱（踩过）**：UDP 的 `send()` 不阻塞 ⇒ 不限速时 PC 会以 80 MB/s 往核心里灌包、

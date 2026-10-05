@@ -47,9 +47,12 @@ def missing_deps():
 def main(argv=None):
     ap = argparse.ArgumentParser(description="把桌面投到 P4 无线显示器上")
     pudcli.add_common(ap)
-    ap.add_argument("--fps", type=float, default=30.0,
-                    help="采集侧的帧率上限（实际速率还取决于屏幕变化量：静止画面不出帧）")
-    ap.add_argument("--quality", type=int, default=75, help="JPEG 质量 1~100")
+    ap.add_argument("--fps", type=float, default=60.0,
+                    help="采集侧的帧率上限。默认 60 = KWin 的 maxFramerate（画面活跃时"
+                         "实测能到 ~55 fps）；想省流量/CPU 用 30，实际速率还取决于屏幕"
+                         "变化量，静止画面不出帧")
+    ap.add_argument("--quality", type=int, default=75,
+                    help="JPEG 质量 1~100（60 fps 下约 1.5 MB/s，链路有 5 MB/s）")
     ap.add_argument("--seconds", type=float, default=0.0, help="投多久；0 = 到 Ctrl-C")
     ap.add_argument("--save-frames", default="",
                     help="额外把最后几张 JPEG 存到这个目录（画面不对时用它查证）")
